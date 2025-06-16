@@ -1,4 +1,5 @@
 import {
+  REDIRECT_URI,
   RELOAD_APP_ID,
   RELOAD_CLIENT_SECRET,
   RELOAD_OAUTH_API_URL,
@@ -9,7 +10,7 @@ export async function POST(request) {
   const { code, codeVerifier } = await request.json();
 
   if (!code) {
-    return new Response("No code provided", { status: 400 });
+    return NextResponse.json({ error: "No code provided" }, { status: 400 });
   }
 
   try {
@@ -23,20 +24,20 @@ export async function POST(request) {
         code,
         client_id: RELOAD_APP_ID,
         client_secret: RELOAD_CLIENT_SECRET,
-        redirect_uri: "http://localhost:3001/callback",
+        redirect_uri: REDIRECT_URI,
         code_verifier: codeVerifier,
       }),
     });
 
     if (!response.ok) {
-      console.log(response);
-      throw new Error("Failed to exchange code");
+      const error = await response.json();
+      throw new Error(error.message || "Failed to exchange code");
     }
 
     const tokens = await response.json();
-    console.log(tokens);
     return NextResponse.json(tokens);
   } catch (error) {
     console.error("Token exchange error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

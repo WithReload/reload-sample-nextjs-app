@@ -31,7 +31,7 @@ export default function Callback() {
         }
 
         const tokens = await response.json();
-        localStorage.setItem("reload_access_token", tokens.access_token);
+        localStorage.setItem("reload_wallet_token", tokens.wallet_token);
         localStorage.setItem("reload_refresh_token", tokens.refresh_token);
 
         router.push("/");

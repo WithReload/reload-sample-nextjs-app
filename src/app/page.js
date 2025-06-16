@@ -2,8 +2,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ResponseDisplay from "./components/ResponseDisplay";
+import ChargeTab from "./components/ChargeTab";
+import PlatformTransactionsTab from "./components/PlatformTransactionsTab";
+import PreviewChargeTab from "./components/PreviewChargeTab";
+import SpecificTransactionTab from "./components/SpecificTransactionTab";
+import WalletTransactionsTab from "./components/WalletTransactionsTab";
 import {
+  OAUTH_SCOPES,
   REDIRECT_URI,
   RELOAD_APP_ID,
   RELOAD_BASE_URL,
@@ -11,10 +16,8 @@ import {
 
 export default function Home() {
   const [isConnecting, setIsConnecting] = useState(false);
-  const [accessToken, setAccessToken] = useState(null);
-  const [refreshToken, setRefreshToken] = useState(null);
+  const [walletToken, setWalletToken] = useState(null);
   const [activeTab, setActiveTab] = useState("wallet");
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Separate response states for each tab
   const [walletResponse, setWalletResponse] = useState(null);
@@ -31,44 +34,9 @@ export default function Home() {
   const [platformError, setPlatformError] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("reload_access_token");
-    const refresh = localStorage.getItem("reload_refresh_token");
-    setAccessToken(token);
-    setRefreshToken(refresh);
+    const token = localStorage.getItem("reload_wallet_token");
+    setWalletToken(token);
   }, []);
-
-  const refreshAccessToken = async () => {
-    try {
-      const response = await fetch("/api/oauth/refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          refresh_token: refreshToken,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to refresh token");
-      }
-
-      const tokens = await response.json();
-      localStorage.setItem("reload_access_token", tokens.access_token);
-      localStorage.setItem("reload_refresh_token", tokens.refresh_token);
-      setAccessToken(tokens.access_token);
-      setRefreshToken(tokens.refresh_token);
-      return tokens.access_token;
-    } catch (error) {
-      console.error("Token refresh error:", error);
-      // If refresh fails, clear tokens and redirect to login
-      localStorage.removeItem("reload_access_token");
-      localStorage.removeItem("reload_refresh_token");
-      setAccessToken(null);
-      setRefreshToken(null);
-      throw error;
-    }
-  };
 
   const makeAuthenticatedRequest = async (url, options = {}) => {
     try {
@@ -76,21 +44,15 @@ export default function Home() {
         ...options,
         headers: {
           ...options.headers,
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${walletToken}`,
         },
       });
 
-      if (response.status === 401 && refreshToken) {
-        // Token expired, try to refresh
-        const newAccessToken = await refreshAccessToken();
-        // Retry the request with new token
-        return fetch(url, {
-          ...options,
-          headers: {
-            ...options.headers,
-            Authorization: `Bearer ${newAccessToken}`,
-          },
-        });
+      if (response.status === 401) {
+        // Token expired, clear and redirect to login
+        localStorage.removeItem("reload_wallet_token");
+        setWalletToken(null);
+        throw new Error("Session expired. Please reconnect your wallet.");
       }
 
       return response;
@@ -112,198 +74,370 @@ export default function Home() {
     authUrl.searchParams.set("client_id", RELOAD_APP_ID);
     authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
     authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set(
-      "scope",
-      "wallet:read transactions:read transactions:write wallet:write"
-    );
+    authUrl.searchParams.set("scope", OAUTH_SCOPES);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
 
     window.location.href = authUrl.toString();
   };
 
-  const handleWalletTransactions = async (e) => {
-    e.preventDefault();
+  const handleWalletTransactions = async (data) => {
     setWalletError(null);
     setWalletResponse(null);
-
-    const formData = new FormData(e.target);
-    const limit = formData.get("limit");
-    const startDate = formData.get("start_date");
-    const endDate = formData.get("end_date");
-
     try {
-      const params = new URLSearchParams();
-      if (limit) params.append("limit", limit);
-      if (startDate) params.append("start_date", startDate);
-      if (endDate) params.append("end_date", endDate);
-
-      const res = await makeAuthenticatedRequest(
-        `/api/wallet/transactions?${params}`
+      const response = await fetch(
+        `/api/wallet/transactions?${new URLSearchParams(data)}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${walletToken}`,
+          },
+        }
       );
-      const data = await res.json();
-      setWalletResponse(data);
-    } catch (err) {
-      setWalletError(err.message);
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to fetch transactions");
+      }
+      setWalletResponse(result);
+    } catch (error) {
+      setWalletError(error.message);
     }
   };
 
-  const handleSpecificTransaction = async (e) => {
-    e.preventDefault();
+  const handleSpecificTransaction = async (data) => {
     setSpecificError(null);
     setSpecificResponse(null);
-
-    const formData = new FormData(e.target);
-    const transactionId = formData.get("transaction_id");
-
     try {
-      const res = await makeAuthenticatedRequest(
-        `/api/wallet/transactions/${transactionId}`
+      const response = await fetch(
+        `/api/wallet/transactions/${data.transaction_id}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${walletToken}`,
+          },
+        }
       );
-      const data = await res.json();
-      setSpecificResponse(data);
-    } catch (err) {
-      setSpecificError(err.message);
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to fetch transaction");
+      }
+      setSpecificResponse(result);
+    } catch (error) {
+      setSpecificError(error.message);
     }
   };
 
-  const handlePreviewCharge = async (e) => {
-    e.preventDefault();
+  const handlePreviewCharge = async (data) => {
     setPreviewError(null);
     setPreviewResponse(null);
-
-    const formData = new FormData(e.target);
-    const amount = formData.get("amount");
-    const amountType = formData.get("amount_type");
-
     try {
-      const res = await makeAuthenticatedRequest("/api/wallet/preview-charge", {
+      const response = await fetch("/api/wallet/preview-charge", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${walletToken}`,
         },
-        body: JSON.stringify({
-          amount: Number(amount),
-          amount_type: amountType,
-        }),
+        body: JSON.stringify(data),
       });
-      const data = await res.json();
-      setPreviewResponse(data);
-    } catch (err) {
-      setPreviewError(err.message);
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to preview charge");
+      }
+      setPreviewResponse(result);
+    } catch (error) {
+      setPreviewError(error.message);
     }
   };
 
-  const handleCharge = async (e) => {
-    e.preventDefault();
+  const handleCharge = async (data) => {
     setChargeError(null);
     setChargeResponse(null);
-
-    const formData = new FormData(e.target);
-    const amount = formData.get("amount");
-    const amountType = formData.get("amount_type");
-    const description = formData.get("description");
-
     try {
-      const res = await makeAuthenticatedRequest("/api/wallet/charge", {
+      const response = await fetch("/api/wallet/charge", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${walletToken}`,
         },
-        body: JSON.stringify({
-          amount: Number(amount),
-          amount_type: amountType,
-          usage_details: {
-            description,
-            metadata: {},
-          },
-        }),
+        body: JSON.stringify(data),
       });
-      const data = await res.json();
-      setChargeResponse(data);
-    } catch (err) {
-      setChargeError(err.message);
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to charge wallet");
+      }
+      setChargeResponse(result);
+    } catch (error) {
+      setChargeError(error.message);
     }
   };
 
-  const handlePlatformTransactions = async (e) => {
-    e.preventDefault();
+  const handlePlatformTransactions = async (data) => {
     setPlatformError(null);
     setPlatformResponse(null);
-
-    const formData = new FormData(e.target);
-    const page = formData.get("page");
-    const limit = formData.get("limit");
-    const startDate = formData.get("start_date");
-    const endDate = formData.get("end_date");
-
     try {
-      const params = new URLSearchParams();
-      if (page) params.append("page", page);
-      if (limit) params.append("limit", limit);
-      if (startDate) params.append("start_date", startDate);
-      if (endDate) params.append("end_date", endDate);
-
-      const res = await fetch(`/api/platform/transactions?${params}`);
-      const data = await res.json();
-      setPlatformResponse(data);
-    } catch (err) {
-      setPlatformError(err.message);
+      const response = await fetch(
+        `/api/platform/transactions?${new URLSearchParams(data)}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Failed to fetch platform transactions"
+        );
+      }
+      setPlatformResponse(result);
+    } catch (error) {
+      setPlatformError(error.message);
     }
   };
 
   const disconnectWallet = () => {
-    localStorage.removeItem("reload_access_token");
-    localStorage.removeItem("reload_refresh_token");
-    setAccessToken(null);
-    setRefreshToken(null);
+    localStorage.removeItem("reload_wallet_token");
+    setWalletToken(null);
+    setWalletResponse(null);
+    setSpecificResponse(null);
+    setPreviewResponse(null);
+    setChargeResponse(null);
+    setPlatformResponse(null);
   };
 
-  const handleRefreshToken = async () => {
-    if (!refreshToken) return;
+  if (!walletToken) {
+    return (
+      <div className='min-h-screen bg-gradient-to-br from-gray-50 to-gray-100'>
+        <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12'>
+          <div className='bg-white rounded-2xl shadow-xl border border-gray-100 p-8 md:p-12'>
+            {/* Hero Section */}
+            <div className='text-center mb-16'>
+              <h1 className='text-5xl font-bold text-gray-900 mb-6'>
+                Welcome to Reload
+              </h1>
+              <p className='text-xl text-gray-600 max-w-3xl mx-auto mb-8'>
+                A powerful platform for managing digital wallets and
+                transactions. Experience seamless integration with our
+                comprehensive API suite.
+              </p>
+              <a
+                href='https://docs.withreload.com'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='inline-flex items-center text-blue-600 hover:text-blue-700 font-medium'
+              >
+                <svg
+                  className='h-5 w-5 mr-2'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'
+                  />
+                </svg>
+                View Documentation
+              </a>
+            </div>
 
-    setIsRefreshing(true);
-    try {
-      await refreshAccessToken();
-    } catch (error) {
-      console.error("Failed to refresh token:", error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
+            {/* Feature Cards */}
+            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16'>
+              <div className='bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow'>
+                <div className='w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4'>
+                  <svg
+                    className='h-6 w-6 text-blue-600'
+                    fill='none'
+                    viewBox='0 0 24 24'
+                    stroke='currentColor'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z'
+                    />
+                  </svg>
+                </div>
+                <h3 className='text-lg font-semibold text-gray-900 mb-2'>
+                  Secure Authentication
+                </h3>
+                <p className='text-gray-600'>
+                  OAuth 2.0 authentication flow with PKCE for enhanced security.
+                </p>
+              </div>
+
+              <div className='bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow'>
+                <div className='w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4'>
+                  <svg
+                    className='h-6 w-6 text-green-600'
+                    fill='none'
+                    viewBox='0 0 24 24'
+                    stroke='currentColor'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z'
+                    />
+                  </svg>
+                </div>
+                <h3 className='text-lg font-semibold text-gray-900 mb-2'>
+                  Wallet Management
+                </h3>
+                <p className='text-gray-600'>
+                  Easily manage digital wallets with comprehensive controls.
+                </p>
+              </div>
+
+              <div className='bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow'>
+                <div className='w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4'>
+                  <svg
+                    className='h-6 w-6 text-purple-600'
+                    fill='none'
+                    viewBox='0 0 24 24'
+                    stroke='currentColor'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'
+                    />
+                  </svg>
+                </div>
+                <h3 className='text-lg font-semibold text-gray-900 mb-2'>
+                  Transaction History
+                </h3>
+                <p className='text-gray-600'>
+                  Track and manage all your transactions with detailed history.
+                </p>
+              </div>
+
+              <div className='bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow'>
+                <div className='w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4'>
+                  <svg
+                    className='h-6 w-6 text-orange-600'
+                    fill='none'
+                    viewBox='0 0 24 24'
+                    stroke='currentColor'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+                    />
+                  </svg>
+                </div>
+                <h3 className='text-lg font-semibold text-gray-900 mb-2'>
+                  Charge & Refund
+                </h3>
+                <p className='text-gray-600'>
+                  Process charges and refunds with real-time preview
+                  capabilities.
+                </p>
+              </div>
+            </div>
+
+            {/* CTA Section */}
+            <div className='text-center'>
+              <button
+                onClick={connectWallet}
+                disabled={isConnecting}
+                className='inline-flex items-center px-8 py-4 border border-transparent text-lg font-medium rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all duration-200 transform hover:scale-105'
+              >
+                {isConnecting ? (
+                  <>
+                    <svg
+                      className='animate-spin -ml-1 mr-3 h-6 w-6 text-white'
+                      fill='none'
+                      viewBox='0 0 24 24'
+                    >
+                      <circle
+                        className='opacity-25'
+                        cx='12'
+                        cy='12'
+                        r='10'
+                        stroke='currentColor'
+                        strokeWidth='4'
+                      />
+                      <path
+                        className='opacity-75'
+                        fill='currentColor'
+                        d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                      />
+                    </svg>
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className='h-6 w-6 mr-2'
+                      fill='none'
+                      viewBox='0 0 24 24'
+                      stroke='currentColor'
+                    >
+                      <path
+                        strokeLinecap='round'
+                        strokeLinejoin='round'
+                        strokeWidth={2}
+                        d='M13 10V3L4 14h7v7l9-11h-7z'
+                      />
+                    </svg>
+                    Connect Your Wallet
+                  </>
+                )}
+              </button>
+              <p className='mt-4 text-sm text-gray-500'>
+                By connecting your wallet, you agree to our Terms of Service and
+                Privacy Policy
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className='container mx-auto p-8 bg-white min-h-screen'>
-      <h1 className='text-3xl font-bold mb-8 text-gray-900'>Test App</h1>
-
-      {!accessToken ? (
-        <button
-          onClick={connectWallet}
-          disabled={isConnecting}
-          className='bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded shadow-sm transition-colors mb-8'
-        >
-          {isConnecting ? "Connecting..." : "Connect Reload Wallet"}
-        </button>
-      ) : (
-        <div className='space-y-6'>
-          <div className='flex gap-4 mb-8'>
+    <div className='min-h-screen bg-gradient-to-br from-gray-50 to-gray-100'>
+      <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12'>
+        <div className='bg-white rounded-2xl shadow-xl border border-gray-100 p-8'>
+          {/* Header */}
+          <div className='flex justify-between items-center mb-8'>
+            <h1 className='text-3xl font-bold text-gray-900'>
+              Reload API Demo
+            </h1>
             <button
               onClick={disconnectWallet}
-              className='bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded shadow-sm transition-colors'
+              className='inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200'
             >
+              <svg
+                className='h-5 w-5 mr-2'
+                fill='none'
+                viewBox='0 0 24 24'
+                stroke='currentColor'
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={2}
+                  d='M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1'
+                />
+              </svg>
               Disconnect Wallet
-            </button>
-            <button
-              onClick={handleRefreshToken}
-              disabled={isRefreshing}
-              className='bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded shadow-sm transition-colors'
-            >
-              {isRefreshing ? "Refreshing..." : "Refresh Token"}
             </button>
           </div>
 
           {/* Tabs */}
-          <div className='border-b border-gray-200'>
+          <div className='border-b border-gray-200 mb-8'>
             <nav className='-mb-px flex space-x-8'>
               <button
                 onClick={() => setActiveTab("wallet")}
@@ -311,7 +445,7 @@ export default function Home() {
                   activeTab === "wallet"
                     ? "border-blue-500 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
               >
                 Wallet Transactions
               </button>
@@ -321,7 +455,7 @@ export default function Home() {
                   activeTab === "specific"
                     ? "border-blue-500 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
               >
                 Specific Transaction
               </button>
@@ -331,7 +465,7 @@ export default function Home() {
                   activeTab === "preview"
                     ? "border-blue-500 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
               >
                 Preview Charge
               </button>
@@ -341,7 +475,7 @@ export default function Home() {
                   activeTab === "charge"
                     ? "border-blue-500 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
               >
                 Charge
               </button>
@@ -351,7 +485,7 @@ export default function Home() {
                   activeTab === "platform"
                     ? "border-blue-500 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
               >
                 Platform Transactions
               </button>
@@ -359,231 +493,45 @@ export default function Home() {
           </div>
 
           {/* Tab Content */}
-          <div className='mt-6'>
+          <div className='mt-8'>
             {activeTab === "wallet" && (
-              <div className='space-y-4'>
-                <h2 className='text-xl font-semibold text-gray-900'>
-                  Get Wallet Transactions
-                </h2>
-                <form
-                  className='flex flex-col gap-4'
-                  onSubmit={handleWalletTransactions}
-                >
-                  <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-                    <label className='text-sm text-gray-700'>
-                      Limit:
-                      <input
-                        type='number'
-                        name='limit'
-                        defaultValue={10}
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 w-24 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                    <label className='text-sm text-gray-700'>
-                      Start Date:
-                      <input
-                        type='date'
-                        name='start_date'
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                    <label className='text-sm text-gray-700'>
-                      End Date:
-                      <input
-                        type='date'
-                        name='end_date'
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                  </div>
-                  <button
-                    type='submit'
-                    className='bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded w-fit shadow-sm transition-colors'
-                  >
-                    Get Wallet Transactions
-                  </button>
-                </form>
-                <ResponseDisplay data={walletResponse} error={walletError} />
-              </div>
+              <WalletTransactionsTab
+                onFetchTransactions={handleWalletTransactions}
+                response={walletResponse}
+                error={walletError}
+              />
             )}
-
             {activeTab === "specific" && (
-              <div className='space-y-4'>
-                <h2 className='text-xl font-semibold text-gray-900'>
-                  Get Specific Transaction
-                </h2>
-                <form
-                  className='flex flex-col gap-4'
-                  onSubmit={handleSpecificTransaction}
-                >
-                  <label className='text-sm text-gray-700'>
-                    Transaction ID:
-                    <input
-                      type='text'
-                      name='transaction_id'
-                      placeholder='tx_123'
-                      className='border border-gray-300 rounded px-2 py-1 ml-2 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                    />
-                  </label>
-                  <button
-                    type='submit'
-                    className='bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded w-fit shadow-sm transition-colors'
-                  >
-                    Get Transaction Details
-                  </button>
-                </form>
-                <ResponseDisplay
-                  data={specificResponse}
-                  error={specificError}
-                />
-              </div>
+              <SpecificTransactionTab
+                onFetchTransaction={handleSpecificTransaction}
+                response={specificResponse}
+                error={specificError}
+              />
             )}
-
             {activeTab === "preview" && (
-              <div className='space-y-4'>
-                <h2 className='text-xl font-semibold text-gray-900'>
-                  Preview Charge
-                </h2>
-                <form
-                  className='flex flex-col gap-4'
-                  onSubmit={handlePreviewCharge}
-                >
-                  <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                    <label className='text-sm text-gray-700'>
-                      Amount:
-                      <input
-                        type='number'
-                        name='amount'
-                        defaultValue={100}
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 w-24 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                    <label className='text-sm text-gray-700'>
-                      Amount Type:
-                      <input
-                        type='text'
-                        name='amount_type'
-                        defaultValue='platform_credits'
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                  </div>
-                  <button
-                    type='submit'
-                    className='bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded w-fit shadow-sm transition-colors'
-                  >
-                    Preview Charge
-                  </button>
-                </form>
-                <ResponseDisplay data={previewResponse} error={previewError} />
-              </div>
+              <PreviewChargeTab
+                onPreviewCharge={handlePreviewCharge}
+                response={previewResponse}
+                error={previewError}
+              />
             )}
-
             {activeTab === "charge" && (
-              <div className='space-y-4'>
-                <h2 className='text-xl font-semibold text-gray-900'>Charge</h2>
-                <form className='flex flex-col gap-4' onSubmit={handleCharge}>
-                  <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-                    <label className='text-sm text-gray-700'>
-                      Amount:
-                      <input
-                        type='number'
-                        name='amount'
-                        defaultValue={100}
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 w-24 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                    <label className='text-sm text-gray-700'>
-                      Amount Type:
-                      <input
-                        type='text'
-                        name='amount_type'
-                        defaultValue='platform_credits'
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                    <label className='text-sm text-gray-700'>
-                      Description:
-                      <input
-                        type='text'
-                        name='description'
-                        defaultValue='Test charge'
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                  </div>
-                  <button
-                    type='submit'
-                    className='bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded w-fit shadow-sm transition-colors'
-                  >
-                    Charge
-                  </button>
-                </form>
-                <ResponseDisplay data={chargeResponse} error={chargeError} />
-              </div>
+              <ChargeTab
+                onCharge={handleCharge}
+                response={chargeResponse}
+                error={chargeError}
+              />
             )}
-
             {activeTab === "platform" && (
-              <div className='space-y-4'>
-                <h2 className='text-xl font-semibold text-gray-900'>
-                  Get Platform Transactions
-                </h2>
-                <form
-                  className='flex flex-col gap-4'
-                  onSubmit={handlePlatformTransactions}
-                >
-                  <div className='grid grid-cols-1 md:grid-cols-4 gap-4'>
-                    <label className='text-sm text-gray-700'>
-                      Page:
-                      <input
-                        type='number'
-                        name='page'
-                        defaultValue={1}
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 w-24 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                    <label className='text-sm text-gray-700'>
-                      Limit:
-                      <input
-                        type='number'
-                        name='limit'
-                        defaultValue={10}
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 w-24 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                    <label className='text-sm text-gray-700'>
-                      Start Date:
-                      <input
-                        type='date'
-                        name='start_date'
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                    <label className='text-sm text-gray-700'>
-                      End Date:
-                      <input
-                        type='date'
-                        name='end_date'
-                        className='border border-gray-300 rounded px-2 py-1 ml-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                      />
-                    </label>
-                  </div>
-                  <button
-                    type='submit'
-                    className='bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded w-fit shadow-sm transition-colors'
-                  >
-                    Get Platform Transactions
-                  </button>
-                </form>
-                <ResponseDisplay
-                  data={platformResponse}
-                  error={platformError}
-                />
-              </div>
+              <PlatformTransactionsTab
+                onFetchTransactions={handlePlatformTransactions}
+                response={platformResponse}
+                error={platformError}
+              />
             )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

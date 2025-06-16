@@ -30,7 +30,8 @@ export async function POST(request) {
     });
 
     if (!response.ok) {
-      throw new Error("Failed to refresh token");
+      const error = await response.json();
+      throw new Error(error.message || "Failed to refresh token");
     }
 
     const tokens = await response.json();

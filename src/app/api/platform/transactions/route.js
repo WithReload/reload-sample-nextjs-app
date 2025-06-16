@@ -24,16 +24,25 @@ export async function GET(request) {
     });
 
     if (!tokenResponse.ok) {
-      throw new Error("Failed to get client credentials token");
+      const error = await tokenResponse.json();
+      throw new Error(
+        error.message || "Failed to get client credentials token"
+      );
     }
 
     const { access_token } = await tokenResponse.json();
 
     const res = await fetch(`${RELOAD_API_URL}/transactions?${searchParams}`, {
       headers: {
+        "Content-Type": "application/json",
         Authorization: `Bearer ${access_token}`,
       },
     });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.message || "Failed to fetch platform transactions");
+    }
 
     const data = await res.json();
     return NextResponse.json(data);
