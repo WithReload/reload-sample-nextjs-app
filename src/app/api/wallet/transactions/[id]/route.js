@@ -30,7 +30,8 @@ export async function GET(request, context) {
     );
 
     if (!response.ok) {
-      throw new Error("Failed to fetch transaction");
+      const error = await response.json();
+      throw new Error(error.error_description || "Failed to fetch transaction");
     }
 
     const data = await response.json();

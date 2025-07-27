@@ -31,7 +31,7 @@ export async function POST(request) {
     if (!res.ok) {
       const error = await res.json();
       console.log(error);
-      throw new Error(error.message || "Failed to preview charge");
+      throw new Error(error.error_description || "Failed to preview charge");
     }
 
     const data = await res.json();

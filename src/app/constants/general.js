@@ -1,8 +1,14 @@
 // export const RELOAD_BASE_URL = "https://app.withreload.com";
 // export const RELOAD_API_URL = "https://api.withreload.com/oauth";
+// export const RELOAD_BASE_URL = "http://localhost:3000";
+// export const RELOAD_API_URL = "http://localhost:3000/api/v1";
+// export const RELOAD_OAUTH_API_URL = "http://localhost:3000/api/v1/oauth";
+
 export const RELOAD_BASE_URL = "http://localhost:3000";
+// export const RELOAD_BASE_URL = "https://staging.withreload.com";
 export const RELOAD_API_URL = "http://localhost:3000/api/v1";
 export const RELOAD_OAUTH_API_URL = "http://localhost:3000/api/v1/oauth";
+
 export const RELOAD_APP_ID =
   "e45d5dc9d7899ca1ffc0433dcc16653b4d6205ba021b578e54a790c582e388fd";
 export const RELOAD_CLIENT_SECRET =

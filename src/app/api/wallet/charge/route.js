@@ -30,7 +30,8 @@ export async function POST(request) {
 
     if (!res.ok) {
       const error = await res.json();
-      throw new Error(error.message || "Failed to charge wallet");
+      console.log(error);
+      throw new Error(error.error_description || "Failed to charge wallet");
     }
 
     const data = await res.json();

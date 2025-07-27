@@ -31,11 +31,13 @@ export async function GET(request) {
 
     if (!res.ok) {
       const error = await res.json();
-      throw new Error(error.message || "Failed to fetch transactions");
+      console.log(error);
+      throw new Error(
+        error.error_description || "Failed to fetch transactions"
+      );
     }
 
     const data = await res.json();
-    console.log(data);
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

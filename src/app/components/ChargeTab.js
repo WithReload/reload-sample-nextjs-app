@@ -9,7 +9,9 @@ export default function ChargeTab({ onCharge, response, error }) {
     const data = {
       amount: formData.get("amount"),
       amount_type: formData.get("amount_type"),
-      description: formData.get("description"),
+      usage_details: {
+        description: formData.get("description"),
+      },
     };
     onCharge(data);
   };
