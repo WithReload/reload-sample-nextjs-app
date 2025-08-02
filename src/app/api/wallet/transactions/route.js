@@ -1,13 +1,14 @@
-import {
-  RELOAD_API_URL,
-  RELOAD_APP_ID,
-  RELOAD_CLIENT_SECRET,
-} from "@/app/constants/general";
+import { RELOAD_API_URL } from "@/app/constants/general";
 import { NextResponse } from "next/server";
 
 export async function GET(request) {
-  const searchParams = request.nextUrl.searchParams;
-  const walletToken = request.headers.get("authorization")?.split(" ")[1];
+  const { searchParams } = new URL(request.url);
+  const limit = searchParams.get("limit") || "10";
+  const offset = searchParams.get("offset") || "0";
+
+  // Get the wallet token from the Authorization header
+  const authHeader = request.headers.get("authorization");
+  const walletToken = authHeader?.replace("Bearer ", "");
 
   if (!walletToken) {
     return NextResponse.json(
@@ -16,30 +17,41 @@ export async function GET(request) {
     );
   }
 
+  // Get client credentials from environment variables
+  const clientId =
+    process.env.RELOAD_APP_ID || process.env.NEXT_PUBLIC_RELOAD_APP_ID;
+  const clientSecret = process.env.RELOAD_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return NextResponse.json(
+      { error: "Client credentials are not configured" },
+      { status: 500 }
+    );
+  }
+
   try {
-    const res = await fetch(
-      `${RELOAD_API_URL}/wallet/transactions?${searchParams}`,
+    const response = await fetch(
+      `${RELOAD_API_URL}/wallet/transactions?limit=${limit}&offset=${offset}`,
       {
+        method: "GET",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${walletToken}`,
-          "x-client-id": RELOAD_APP_ID,
-          "x-client-secret": RELOAD_CLIENT_SECRET,
+          "X-Client-ID": clientId,
+          "X-Client-Secret": clientSecret,
         },
       }
     );
 
-    if (!res.ok) {
-      const error = await res.json();
-      console.log(error);
-      throw new Error(
-        error.error_description || "Failed to fetch transactions"
-      );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to fetch wallet transactions");
     }
 
-    const data = await res.json();
+    const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
+    console.error("Wallet transactions error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

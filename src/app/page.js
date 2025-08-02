@@ -61,24 +61,33 @@ export default function Home() {
     }
   };
 
-  const connectWallet = () => {
+  const connectWallet = async () => {
     setIsConnecting(true);
 
-    // Generate PKCE code verifier and challenge
-    const codeVerifier = generateRandomString(64);
-    localStorage.setItem("code_verifier", codeVerifier);
+    try {
+      // Generate PKCE code verifier and challenge
+      const codeVerifier = generateRandomString(64);
+      sessionStorage.setItem("code_verifier", codeVerifier);
 
-    const codeChallenge = base64URLEncode(sha256(codeVerifier));
+      const hash = await sha256(codeVerifier);
+      const codeChallenge = base64URLEncode(hash);
 
-    const authUrl = new URL(`${RELOAD_BASE_URL}/oauth/authorize`);
-    authUrl.searchParams.set("client_id", RELOAD_APP_ID);
-    authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("scope", OAUTH_SCOPES);
-    authUrl.searchParams.set("code_challenge", codeChallenge);
-    authUrl.searchParams.set("code_challenge_method", "S256");
+      const authUrl = new URL(`${RELOAD_BASE_URL}/oauth/authorize`);
+      authUrl.searchParams.set("client_id", RELOAD_APP_ID);
+      authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", OAUTH_SCOPES);
+      authUrl.searchParams.set("code_challenge", codeChallenge);
+      authUrl.searchParams.set("code_challenge_method", "S256");
 
-    window.location.href = authUrl.toString();
+      // Pass code verifier as state parameter for cross-domain compatibility
+      authUrl.searchParams.set("state", codeVerifier);
+
+      window.location.href = authUrl.toString();
+    } catch (error) {
+      console.error("Error in connectWallet:", error);
+      setIsConnecting(false);
+    }
   };
 
   const handleWalletTransactions = async (data) => {

@@ -1,8 +1,4 @@
-import {
-  RELOAD_APP_ID,
-  RELOAD_CLIENT_SECRET,
-  RELOAD_OAUTH_API_URL,
-} from "@/app/constants/general";
+import { RELOAD_API_URL, RELOAD_APP_ID } from "@/app/constants/general";
 import { NextResponse } from "next/server";
 
 export async function POST(request) {
@@ -16,7 +12,7 @@ export async function POST(request) {
   }
 
   try {
-    const response = await fetch(`${RELOAD_OAUTH_API_URL}/token`, {
+    const response = await fetch(`${RELOAD_API_URL}/oauth/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -25,7 +21,7 @@ export async function POST(request) {
         grant_type: "refresh_token",
         refresh_token,
         client_id: RELOAD_APP_ID,
-        client_secret: RELOAD_CLIENT_SECRET,
+        client_secret: process.env.RELOAD_CLIENT_SECRET,
       }),
     });
 
