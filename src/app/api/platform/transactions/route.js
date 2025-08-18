@@ -72,7 +72,9 @@ export async function GET(request) {
       if (contentType && contentType.includes("application/json")) {
         const error = await response.json();
         throw new Error(
-          error.message || "Failed to fetch platform transactions"
+          error.message ||
+            error.error_description ||
+            "Failed to fetch platform transactions"
         );
       } else {
         // Handle non-JSON responses (like HTML error pages)

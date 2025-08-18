@@ -45,7 +45,11 @@ export async function GET(request) {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Failed to fetch wallet transactions");
+      throw new Error(
+        error.message ||
+          error.error_description ||
+          "Failed to fetch wallet transactions"
+      );
     }
 
     const data = await response.json();

@@ -59,7 +59,7 @@ export async function POST(request) {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Failed to charge wallet");
+      throw new Error(error.error_description || "Failed to charge wallet");
     }
 
     const data = await response.json();

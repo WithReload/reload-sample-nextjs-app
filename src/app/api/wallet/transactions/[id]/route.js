@@ -50,7 +50,11 @@ export async function GET(request, { params }) {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Failed to fetch transaction");
+      throw new Error(
+        error.message ||
+          error.error_description ||
+          "Failed to fetch transaction"
+      );
     }
 
     const data = await response.json();
