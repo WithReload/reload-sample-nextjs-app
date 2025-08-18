@@ -12,6 +12,7 @@ export default function ChargeTab({ onCharge, response, error }) {
       usage_details: {
         description: formData.get("description"),
       },
+      ...(formData.get("ai_agent_id") && { ai_agent_id: formData.get("ai_agent_id") }),
     };
     onCharge(data);
   };
@@ -77,6 +78,21 @@ export default function ChargeTab({ onCharge, response, error }) {
               name='description'
               className='block w-full px-4 py-2.5 text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors'
               placeholder='Enter a description for this charge'
+            />
+          </div>
+          <div>
+            <label
+              htmlFor='ai_agent_id'
+              className='block text-sm font-medium text-gray-700 mb-1'
+            >
+              AI Agent ID (Optional)
+            </label>
+            <input
+              type='text'
+              id='ai_agent_id'
+              name='ai_agent_id'
+              className='block w-full px-4 py-2.5 text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors'
+              placeholder='Enter AI agent ID for tracking'
             />
           </div>
           <button

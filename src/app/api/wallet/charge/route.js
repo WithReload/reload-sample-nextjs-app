@@ -53,6 +53,7 @@ export async function POST(request) {
       body: JSON.stringify({
         ...body,
         description: description,
+        ...(body.ai_agent_id && { ai_agent_id: body.ai_agent_id }),
       }),
     });
 

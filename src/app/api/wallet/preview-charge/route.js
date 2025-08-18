@@ -35,6 +35,13 @@ export async function POST(request) {
   }
 
   try {
+    // Prepare request body with optional ai_agent_id
+    const requestBody = {
+      amount: body.amount,
+      description: body.description,
+      ...(body.ai_agent_id && { ai_agent_id: body.ai_agent_id }),
+    };
+
     const response = await fetch(`${RELOAD_API_URL}/wallet/preview-charge`, {
       method: "POST",
       headers: {
@@ -43,7 +50,7 @@ export async function POST(request) {
         "X-Client-ID": clientId,
         "X-Client-Secret": clientSecret,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
