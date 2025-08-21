@@ -42,14 +42,23 @@ export async function POST(request) {
   }
 
   try {
+    // Prepare headers with optional idempotency key
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${walletToken}`,
+      "X-Client-ID": clientId,
+      "X-Client-Secret": clientSecret,
+    };
+
+    // Add idempotency key if provided
+    if (body.idempotency_key) {
+      headers["X-Idempotency-Key"] = body.idempotency_key;
+    }
+
+    console.log("Wallet charge headers:", headers);
     const response = await fetch(`${RELOAD_API_URL}/wallet/charge`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${walletToken}`,
-        "X-Client-ID": clientId,
-        "X-Client-Secret": clientSecret,
-      },
+      headers,
       body: JSON.stringify({
         ...body,
         description: description,
@@ -59,7 +68,10 @@ export async function POST(request) {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error_description || "Failed to charge wallet");
+      console.log("Wallet charge error:", error);
+      throw new Error(
+        error.error || error.error_description || "Failed to charge wallet"
+      );
     }
 
     const data = await response.json();

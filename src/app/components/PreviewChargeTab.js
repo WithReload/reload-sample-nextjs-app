@@ -9,7 +9,12 @@ export default function PreviewChargeTab({ onPreviewCharge, response, error }) {
     const data = {
       amount: formData.get("amount"),
       amount_type: formData.get("amount_type"),
-      ...(formData.get("ai_agent_id") && { ai_agent_id: formData.get("ai_agent_id") }),
+      ...(formData.get("ai_agent_id") && {
+        ai_agent_id: formData.get("ai_agent_id"),
+      }),
+      ...(formData.get("idempotency_key") && {
+        idempotency_key: formData.get("idempotency_key"),
+      }),
     };
     onPreviewCharge(data);
   };
@@ -75,6 +80,22 @@ export default function PreviewChargeTab({ onPreviewCharge, response, error }) {
               name='ai_agent_id'
               className='block w-full px-4 py-2.5 text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors'
               placeholder='Enter AI agent ID for tracking'
+            />
+          </div>
+          <div>
+            <label
+              htmlFor='idempotency_key'
+              className='block text-sm font-medium text-gray-700 mb-1'
+            >
+              Idempotency Key (Optional - auto generated on the backend before
+              calling API if not provided)
+            </label>
+            <input
+              type='text'
+              id='idempotency_key'
+              name='idempotency_key'
+              className='block w-full px-4 py-2.5 text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors'
+              placeholder='Enter idempotency key to prevent duplicate charges'
             />
           </div>
           <button

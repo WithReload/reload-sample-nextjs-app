@@ -39,24 +39,34 @@ export async function POST(request) {
     const requestBody = {
       amount: body.amount,
       description: body.description,
+      amount_type: body.amount_type,
       ...(body.ai_agent_id && { ai_agent_id: body.ai_agent_id }),
     };
 
+    // Prepare headers with optional idempotency key
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${walletToken}`,
+      "X-Client-ID": clientId,
+      "X-Client-Secret": clientSecret,
+    };
+
+    // Add idempotency key if provided
+    if (body.idempotency_key) {
+      headers["X-Idempotency-Key"] = body.idempotency_key;
+    }
+
     const response = await fetch(`${RELOAD_API_URL}/wallet/preview-charge`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${walletToken}`,
-        "X-Client-ID": clientId,
-        "X-Client-Secret": clientSecret,
-      },
+      headers,
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      console.log("Preview charge error:", error);
-      throw new Error(error.error_description || "Failed to preview charge");
+      throw new Error(
+        error.message || error.error_description || "Failed to preview charge"
+      );
     }
 
     const data = await response.json();
